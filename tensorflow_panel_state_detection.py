@@ -50,11 +50,9 @@ def run_camera(parent):
 
 # Function to capture image from camera and classify
 def capture_and_classify():
-    #model = tf.saved_model.load(r'TF_model')
     model = tf.keras.models.load_model('TF_model')
     #cap = cv2.VideoCapture(0)  # Open the default camera
     ret, frame = vid.read()  # Capture frame
-    vid.release()  # Release the camera
     if not ret:
         print("Error: Failed to capture image from the camera.")
         return

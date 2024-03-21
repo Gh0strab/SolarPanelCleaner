@@ -9,8 +9,6 @@ def load_and_preprocess_image(img):
     img_array = np.array(img) / 255.0  # Normalize pixel values
     return img_array
 
-# Load your trained model
-
 def run_camera(parent):
     global vid
     # Initialize the video capture
@@ -51,7 +49,6 @@ def run_camera(parent):
 # Function to capture image from camera and classify
 def capture_and_classify():
     model = tf.keras.models.load_model('TF_model')
-    #cap = cv2.VideoCapture(0)  # Open the default camera
     ret, frame = vid.read()  # Capture frame
     if not ret:
         print("Error: Failed to capture image from the camera.")

@@ -3,7 +3,6 @@ import threading
 import board
 import RPi.GPIO as GPIO
 from adafruit_motorkit import MotorKit
-from adafruit_motor import stepper
 
 class cleaner_logic:
     def __init__(self, gui_instance):
@@ -26,10 +25,11 @@ class cleaner_logic:
         GPIO.setup(self.shutoff_valve_relay_pin, GPIO.OUT)
 
     def run_motors(self):
-        throttle_value = 0.5  # Initial throttle value
+        throttle_value = 0.45  # Initial throttle value
         while self.task_running:
             self.kit.motor1.throttle = throttle_value * self.direction
             self.kit.motor2.throttle = throttle_value * self.direction
+
     def check_limit_switch(self):
         return GPIO.input(self.limit_switch_1_pin) or GPIO.input(self.limit_switch_2_pin)
 
@@ -39,6 +39,13 @@ class cleaner_logic:
     def water_system_state(self, state):
         GPIO.output(self.shutoff_valve_relay_pin, GPIO.HIGH if state == "on" else GPIO.LOW)
         self.gui_instance.debug_window(f"Water System {'on' if state == 'on' else 'off'}\n")
+
+    def reset_system(self):
+        self.led_state('off')
+        self.water_system_state('off')
+        self.kit.motor1.throttle = 0.0
+        self.kit.motor2.throttle = 0.0
+        self.direction = 1.0
 
     def perform_task(self):
         start_time = time.time()
@@ -50,22 +57,22 @@ class cleaner_logic:
         motor_thread.start()
 
         while self.task_running:  # Check flag to see if task should continue
-            if time.time() - start_time >= 1:
+            if time.time() - start_time >= 5:
                 if self.check_limit_switch():
-                    self.gui_instance.debug_window("Limit Switch Hit;\n Stopping Program")
-                    self.gui_instance.stop_task()  # Stop task when limit switch is hit
-                    self.task_running = False
+                    self.direction = -1.0
+                    if self.check_limit_switch() == False:
+                        self.gui_instance.debug_window("Limit Switch Hit\n")
+                        self.gui_instance.stop_task()  # Stop task when limit switch is hit
+                        self.task_running = False
                     break
             elif self.check_limit_switch():
-                self.gui_instance.debug_window("Limit Switch Hit;\n Reversing Direction")
+                self.gui_instance.debug_window("Limit Switch Hit;\n"+"Reversing Direction\n")
                 self.direction = -1.0
             time.sleep(0.1)
 
-        self.led_state('off')
-        self.water_system_state('off')
-        self.kit.motor1.throttle = 0.0
-        self.kit.motor2.throttle = 0.0
-        self.direction = 1.0
+        # Resets system values to be ready to go again
+        self.reset_system()
+
     def stop_task(self):
         self.task_running = False
 

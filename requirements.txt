@@ -1,0 +1,6 @@
+keras=2.13.1
+tensorflow=2.13.0
+customtkinter=5.2.2
+adafruit_motorkit=3.60.0
+pillow=9.5.0
+opencv=4.4.0

@@ -22,7 +22,16 @@ output_details = interpreter.get_output_details()
 def run_camera(parent):
     global vid
     # Initialize the video capture
-    vid = cv2.VideoCapture(0)
+    try:
+        vid = cv2.VideoCapture(0)
+        if not vid.isOpened():
+            raise RuntimeError("Failed to open camera using default method.")
+    except RuntimeError:
+        print("Trying alternate method...")
+        vid = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        if not vid.isOpened():
+            print("Failed to open camera using alternate method.")
+            vid = None
     # Set the width and height of the video frame
     vid.set(cv2.CAP_PROP_FRAME_WIDTH, 400)
     vid.set(cv2.CAP_PROP_FRAME_HEIGHT, 200)
@@ -43,7 +52,7 @@ def run_camera(parent):
             # Update the label with the new frame
             imagebox.configure(image=tk_img)
             imagebox.image = tk_img
-            # Repeat the process after every 10 milliseconds
+            # Repeat the process after every 5 milliseconds
             imagebox.after(10, update_video)
 
     # Create the frame to contain the imagebox

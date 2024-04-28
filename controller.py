@@ -1,5 +1,5 @@
-import time
 import threading
+import time
 import board
 import RPi.GPIO as GPIO
 from adafruit_motorkit import MotorKit
@@ -17,15 +17,13 @@ class cleaner_logic:
     def setup_gpio(self):
         self.limit_switch_1_pin = 16
         self.limit_switch_2_pin = 25
-        self.led_relay_pin = 18
-        self.shutoff_valve_relay_pin = 17
+        self.shutoff_valve_relay_pin = 18
         GPIO.setup(self.limit_switch_1_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(self.limit_switch_2_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(self.led_relay_pin, GPIO.OUT)
         GPIO.setup(self.shutoff_valve_relay_pin, GPIO.OUT)
 
     def run_motors(self):
-        throttle_value = 0.45  # Initial throttle value
+        throttle_value = 0.5  # Initial throttle value
         while self.task_running:
             self.kit.motor1.throttle = throttle_value * self.direction
             self.kit.motor2.throttle = throttle_value * self.direction
@@ -33,48 +31,65 @@ class cleaner_logic:
     def check_limit_switch(self):
         return GPIO.input(self.limit_switch_1_pin) or GPIO.input(self.limit_switch_2_pin)
 
-    def led_state(self, state):
-        GPIO.output(self.led_relay_pin, GPIO.HIGH if state == "on" else GPIO.LOW)
-
     def water_system_state(self, state):
         GPIO.output(self.shutoff_valve_relay_pin, GPIO.HIGH if state == "on" else GPIO.LOW)
-        self.gui_instance.debug_window(f"Water System {'on' if state == 'on' else 'off'}\n")
+        self.gui_instance.after(0, self.gui_instance.debug_window,f"Water System {'on' if state == 'on' else 'off'}\n")
 
     def reset_system(self):
-        self.led_state('off')
+        self.stop_task()
         self.water_system_state('off')
         self.kit.motor1.throttle = 0.0
         self.kit.motor2.throttle = 0.0
         self.direction = 1.0
 
     def perform_task(self):
-        start_time = time.time()
         self.task_running = True
-        self.led_state('on')
         self.water_system_state('on')
 
         motor_thread = threading.Thread(target=self.run_motors)
         motor_thread.start()
 
-        while self.task_running:  # Check flag to see if task should continue
-            if time.time() - start_time >= 5:
-                if self.check_limit_switch():
-                    self.direction = -1.0
-                    if self.check_limit_switch() == False:
-                        self.gui_instance.debug_window("Limit Switch Hit\n")
-                        self.gui_instance.stop_task()  # Stop task when limit switch is hit
-                        self.task_running = False
+        while self.task_running:
+            if self.check_limit_switch():
+                if GPIO.input(self.limit_switch_1_pin) == GPIO.HIGH:
+                    self.gui_instance.debug_window("Limit Switch 1 Hit;\n" + "Homing System\n")
+                    self.direction = 1.0
+                    while GPIO.input(self.limit_switch_1_pin) == GPIO.HIGH:
+                        print("Limit switch 1 still pressed")
+                        time.sleep(0.1)  # Add a small delay to avoid busy waiting
+                    print("Limit switch 1 released")
                     break
-            elif self.check_limit_switch():
-                self.gui_instance.debug_window("Limit Switch Hit;\n"+"Reversing Direction\n")
-                self.direction = -1.0
-            time.sleep(0.1)
+                elif GPIO.input(self.limit_switch_2_pin) == GPIO.HIGH:
+                    self.gui_instance.debug_window("Limit Switch 2 Hit;\n" + "Reversing Direction\n")
+                    self.direction = -1.0
+                    self.water_system_state('off')
+                time.sleep(.05)
 
         # Resets system values to be ready to go again
         self.reset_system()
 
     def stop_task(self):
         self.task_running = False
+
+    def home(self):
+        self.task_running = True
+        self.gui_instance.debug_window("Homing System")
+        self.direction = -1.0
+        motor_thread = threading.Thread(target=self.run_motors)
+        motor_thread.start()
+        while self.task_running:
+            if self.check_limit_switch():
+                if self.check_limit_switch() == "Limit switch 1":
+                    self.gui_instance.after(0, self.gui_instance.debug_window,"Limit Switch 1 Hit;\n" + "Homing System\n")
+                    self.direction = 1.0
+                    while GPIO.input(self.limit_switch_1_pin) == GPIO.HIGH:
+                        print("Limit switch 1 still pressed")
+                        time.sleep(0.1)  # Add a small delay to avoid busy waiting
+                    print("Limit switch 1 released")
+                    break
+        self.gui_instance.stop_task()  # Stop task when limit switch is hit
+        self.task_running = False
+        self.reset_system()
 
     def __del__(self):
         GPIO.cleanup()

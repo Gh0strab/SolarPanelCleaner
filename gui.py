@@ -1,8 +1,9 @@
 import customtkinter
 from PIL import Image
 import controller
+#import controller_new
+import queue
 import threading
-#import tensorflow_panel_state_detection as PSD
 import tflite_panel_state_detection as PSD
 
 customtkinter.set_appearance_mode("dark")
@@ -19,7 +20,7 @@ class App(customtkinter.CTk):
         self.resizable(True,True)
 
         # Creates background image
-        self.bg_image = customtkinter.CTkImage(Image.open(r"OPTION5.png"), size=(self.width, self.height))
+        self.bg_image = customtkinter.CTkImage(Image.open(r"Background 8.png"), size=(self.width, self.height))
         self.bg_image_label = customtkinter.CTkLabel(self, text="", image=self.bg_image)
         self.bg_image_label.place(x=0, y=0, relwidth=1, relheight=1)
 
@@ -29,11 +30,15 @@ class App(customtkinter.CTk):
 
         # Add text "INNORAIDERS" to the top left corner
         self.innoraider_label = customtkinter.CTkLabel(self.top_bar, text="INNORAIDERS", font=customtkinter.CTkFont(size=35, weight="bold"))
-        self.innoraider_label.place(relx=0.30, rely=0.1, anchor="ne")
+        self.innoraider_label.place(relx=0.30, rely=0.08, anchor="ne")
 
-        # Adds option menu to top right corner
-        self.optionmenu = customtkinter.CTkOptionMenu(self.top_bar, values=["MANUAL", "TIMER", "AUTO AI"], width=200, height=40,font=customtkinter.CTkFont(size=17, weight="bold"),fg_color="gray",button_color="gray",dropdown_font=customtkinter.CTkFont(size=20, weight="bold"),button_hover_color="black")
-        self.optionmenu.place(relx=0.98, rely=0.5, anchor="e")
+        # Creates option menu
+        self.optionmenu = customtkinter.CTkOptionMenu(self.top_bar, values=["MANUAL", "TIMER", "AUTO AI"], width=200, height=40,font=customtkinter.CTkFont(size=17, weight="bold"),fg_color="#4a4a49",button_color="#4a4a49",dropdown_font=customtkinter.CTkFont(size=15, weight="bold"),button_hover_color="black")
+        self.optionmenu.place(relx=0.93, rely=0.5, anchor="e")
+
+        # Creates home button with icon
+        self.home_button = customtkinter.CTkButton(self.top_bar,text="",image=customtkinter.CTkImage(Image.open(r"home-button-white-icon.png")), width=35, height=38, fg_color=("#141314"), corner_radius=10, command=self.send_home)
+        self.home_button.place(relx=0.99, rely=0.5, anchor="e")
 
         # Create textbox
         self.textbox = customtkinter.CTkTextbox(self, width=175, height=200, border_color="#9D0FFF", border_width=5, corner_radius=15,font=customtkinter.CTkFont(size=12, weight="bold"))
@@ -50,18 +55,19 @@ class App(customtkinter.CTk):
         self.progressbar_1.configure(mode="indeterminate", indeterminate_speed=.75 , height=25)
 
         # Create start button
-        self.start_button = customtkinter.CTkButton(self, text="START", font=customtkinter.CTkFont(size=65, weight="bold"), fg_color=("#9D0FFF"), width=320, height=100, corner_radius=0, command=self.start_task)  # Removed parentheses
-        self.start_button.place(relx=0.25, rely=0.8, anchor="center")
+        self.start_button = customtkinter.CTkButton(self, text="START", font=customtkinter.CTkFont(size=65, weight="bold"), fg_color=("#9D0FFF"), hover_color="#4a4a49", width=320, height=100, corner_radius=0, command=self.start_task)  # Removed parentheses
+        self.start_button.place(relx=0.25, rely=0.82, anchor="center")
 
         # Create stop button
-        self.stop_button = customtkinter.CTkButton(self, text="STOP", font=customtkinter.CTkFont(size=65, weight="bold"), fg_color=("#EF6F8F"), width=320, height=100, corner_radius=0, command=self.stop_task)  # Removed parentheses
-        self.stop_button.place(relx=0.75, rely=0.8, anchor="center")
+        self.stop_button = customtkinter.CTkButton(self, text="STOP", font=customtkinter.CTkFont(size=65, weight="bold"), fg_color=("#EF6F8F"), hover_color="#4a4a49", width=320, height=100, corner_radius=0, command=self.stop_task)  # Removed parentheses
+        self.stop_button.place(relx=0.75, rely=0.82, anchor="center")
 
         # Initial Conditions
         self.task_running = False
         self.controller_instance = controller.cleaner_logic(self)
+        self.debug_queue = queue.Queue()  # Create a queue for buffering debug messages
+        self.after(1000, self.update_debug_window)
         PSD.run_camera(self)
-
 
     def start_task(self):
         if self.task_running:
@@ -98,11 +104,26 @@ class App(customtkinter.CTk):
         self.progressbar_1.stop()
         self.controller_instance.stop_task()
 
+        # Wait for threads to terminate
+        self.controller_instance.join()  # Assuming the controller instance has a join method
+
         self.debug_window("Process Complete.\n")
 
     def debug_window(self, text):
-        self.textbox.insert("end", text + "\n")
+        self.debug_queue.put(text)
+
+    def update_debug_window(self):
+        while not self.debug_queue.empty():
+            text = self.debug_queue.get()  # Get a debug message from the queue
+            self.textbox.insert("end", text + "\n")
         self.textbox.see("end")
+        self.after(1000, self.update_debug_window)  # Schedule next update
+
+    def send_home(self):
+        self.task_running = True
+        self.progressbar_1.configure(progress_color="#EF6F8F")
+        self.progressbar_1.start()
+        threading.Thread(target=self.controller_instance.home).start()
 
 if __name__ == "__main__":
     app = App()
